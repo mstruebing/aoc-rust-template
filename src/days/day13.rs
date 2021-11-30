@@ -2,9 +2,9 @@ use nom::IResult;
 
 use crate::days::Day;
 
-pub struct Day01;
+pub struct Day13;
 
-impl Day for Day01 {
+impl Day for Day13 {
   type Input = String;
 
   fn parse(_input: &str) -> IResult<&str, Self::Input> {
