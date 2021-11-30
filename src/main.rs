@@ -1,31 +1,42 @@
 mod parser;
 use chrono::prelude::*;
-use days::*;
-use std::time::Instant;
-
 use clap::{App, AppSettings, Arg, SubCommand};
+use days::*;
+use std::fs;
+use std::time::Instant;
 
 mod days;
 
+const YEAR: usize = 2021;
+
 fn main() {
   let matches = App::new("Advent of Code template")
-    .version("2021")
+    .version(&*format!("{}", YEAR))
     .author("Rik van Toor <rik@rikvt.dev>")
     .about("A template for solving Advent of Code puzzles in Rust")
     .setting(AppSettings::SubcommandRequiredElseHelp)
-    .subcommands(vec![SubCommand::with_name("run")
-      .about("Execute one or multiple days")
-      .arg(
-        Arg::with_name("day")
-          .help("The number of the day you want to run")
-          .takes_value(true),
-      )
-      .arg(
-        Arg::with_name("all")
-          .short("a")
-          .long("all")
-          .help("Runs all days sequentially"),
-      )])
+    .subcommands(vec![
+      SubCommand::with_name("run")
+        .about("Execute one or multiple days. Runs today's puzzle by default.")
+        .arg(
+          Arg::with_name("day")
+            .help("The number of the day you want to run")
+            .takes_value(true),
+        )
+        .arg(
+          Arg::with_name("all")
+            .short("a")
+            .long("all")
+            .help("Runs all days sequentially"),
+        ),
+      SubCommand::with_name("get-input")
+        .about("Download an input file. By default it will download today's input.")
+        .arg(
+          Arg::with_name("day")
+            .help("The number of the day you want to run")
+            .takes_value(true),
+        ),
+    ])
     .get_matches();
 
   if let Some(matches) = matches.subcommand_matches("run") {
@@ -36,16 +47,46 @@ fn main() {
         Some(day) => run_day(day),
         None => {
           println!("No day parameter specified, attempting to run today");
-          let now = Local::now();
-          let now_day = now.day();
-          if now.month() == 12 && now_day >= 1 && now_day <= 25 {
-            println!("Running day {}", now_day);
-            run_day(&format!("{}", now_day));
-          } else {
-            println!("Today is not a valid Advent of Code day. Please specify a day");
-          }
+          let now_day = get_today();
+          println!("Running day {}", now_day);
+          run_day(&format!("{}", now_day));
         }
       }
+    }
+  } else if let Some(matches) = matches.subcommand_matches("get-input") {
+    match matches.value_of("day") {
+      Some(day) => download_input(day),
+      None => {
+        println!("No day parameter specified, attempting to download today's input");
+        let now_day = get_today();
+        println!("Getting input for day {}", now_day);
+        download_input(&format!("{}", now_day));
+      }
+    }
+  }
+}
+
+fn get_today() -> usize {
+  let now = Local::now();
+  let now_day = now.day();
+  if now.month() == 12 && now_day >= 1 && now_day <= 25 {
+    now_day.try_into().unwrap()
+  } else {
+    panic!("Today is not a valid Advent of Code day. Please specify a day");
+  }
+}
+
+fn parse_day(day: &str) -> usize {
+  match day.parse() {
+    Ok(i) => {
+      if (i..=25).contains(&i) {
+        i
+      } else {
+        panic!("{} is not a valid day. Only days 1-25 are allowed.", i)
+      }
+    }
+    Err(_) => {
+      panic!("{} is not a valid day. Please provide a number.", day)
     }
   }
 }
@@ -55,18 +96,7 @@ fn run_all_days() {
 }
 
 fn run_day(day: &str) {
-  match day.parse() {
-    Ok(i) => {
-      if (1..=25).contains(&i) {
-        run_day_helper(i)
-      } else {
-        panic!("{} is not a valid day. Only days 1-25 are allowed.", i)
-      }
-    }
-    Err(_) => {
-      panic!("{} is not a valid day. Please provide a number.", day)
-    }
-  }
+  run_day_helper(parse_day(day))
 }
 
 // Panics if you provide a value outside the range of 1 to 25
@@ -101,5 +131,29 @@ fn run_day_helper(day: usize) {
     24 => day24::Day24::run_day(input_fp),
     25 => day25::Day25::run_day(input_fp),
     d => panic!("Provided unsupported day {}", d),
+  }
+}
+
+fn download_input(day: &str) {
+  // Read session cookie from .session file
+  let session = fs::read_to_string(".session").expect("Could not find .session file");
+  let day = parse_day(day);
+  let url = format!("https://adventofcode.com/{}/day/{}/input", YEAR, day);
+  let client = reqwest::blocking::Client::new();
+  let response = client
+    .get(url)
+    .header("cookie", format!("session={};", session))
+    .send()
+    .unwrap();
+
+  if response.status().is_success() {
+    let mut text = response.text().unwrap();
+    // Remove trailing newline
+    text.pop();
+    let path = format!("inputs/day{:02}.txt", day);
+    fs::write(&path, text).unwrap();
+    println!("Successfully downloaded input to {}", &path);
+  } else {
+    panic!("Could not get input. Is your correct session cookie in your .session file?")
   }
 }
