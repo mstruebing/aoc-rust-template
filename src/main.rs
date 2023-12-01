@@ -1,76 +1,84 @@
 mod parser;
 use chrono::prelude::*;
-use clap::{App, AppSettings, Arg, SubCommand};
+use clap::{Parser, Subcommand, Args};
 use days::*;
 use std::fs;
 use std::time::Instant;
 
 mod days;
 
-const YEAR: usize = 2021;
+const YEAR: usize = 2023;
+
+#[derive(Parser)]
+#[command(
+    author = "Rik van Toor <rik@rikvt.dev>",
+    version,
+    about = "A template for solving Advent of Code puzzles in Rust",
+    long_about = None
+  )]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+  #[command(about = "Execute one or multiple days. Runs today's puzzle by default.")]
+  Run {
+    #[command(flatten)]
+    opts : DayOrAll
+  },
+  #[command(about = "Download an input file. By default it will download today's input.")]
+  GetInput {
+    #[command(flatten)]
+    opts : DayOrAll
+  },
+}
+
+#[derive(Args)]
+#[group(multiple = false)]
+struct DayOrAll {
+  #[arg()]
+  day : Option<usize>,
+  #[arg(long)]
+  all : bool,
+}
 
 fn main() {
-  let matches = App::new("Advent of Code template")
-    .version(&*format!("{}", YEAR))
-    .author("Rik van Toor <rik@rikvt.dev>")
-    .about("A template for solving Advent of Code puzzles in Rust")
-    .setting(AppSettings::SubcommandRequiredElseHelp)
-    .subcommands(vec![
-      SubCommand::with_name("run")
-        .about("Execute one or multiple days. Runs today's puzzle by default.")
-        .arg(
-          Arg::with_name("day")
-            .help("The number of the day you want to run")
-            .takes_value(true),
-        )
-        .arg(
-          Arg::with_name("all")
-            .short("a")
-            .long("all")
-            .help("Runs all days sequentially"),
-        ),
-      SubCommand::with_name("get-input")
-        .about("Download an input file. By default it will download today's input.")
-        .arg(
-          Arg::with_name("day")
-            .help("The number of the day you want to run")
-            .takes_value(true),
-        )
-        .arg(
-          Arg::with_name("all")
-            .short("a")
-            .long("all")
-            .help("Downloads input for all days sequentially"),
-        ),
-    ])
-    .get_matches();
+  let cli = Cli::parse();
+  match cli.command {
+    Command::Run{opts} => run(opts),
+    Command::GetInput{opts} => get_input(opts),
+  }
+}
 
-  if let Some(matches) = matches.subcommand_matches("run") {
-    if matches.is_present("all") {
-      run_all_days();
-    } else {
-      match matches.value_of("day") {
-        Some(day) => run_day(parse_day(day)),
-        None => {
-          println!("No day parameter specified, attempting to run today");
-          let now_day = get_today();
-          println!("Running day {}", now_day);
-          run_day(now_day);
-        }
+fn get_input(opts : DayOrAll) {
+  if opts.all {
+    download_all_input()
+  } else {
+    match opts.day {
+      Some(day) => download_input(day_range_check(day)),
+      None => {
+        println!("No day parameter specified, attempting to download today's input");
+        let now_day = get_today();
+        println!("Getting input for day {}", now_day);
+        download_input(now_day);
       }
     }
-  } else if let Some(matches) = matches.subcommand_matches("get-input") {
-    if matches.is_present("all") {
-      download_all_input();
-    } else {
-      match matches.value_of("day") {
-        Some(day) => download_input(parse_day(day)),
-        None => {
-          println!("No day parameter specified, attempting to download today's input");
-          let now_day = get_today();
-          println!("Getting input for day {}", now_day);
-          download_input(now_day);
-        }
+  }
+}
+
+fn run(opts : DayOrAll) {
+  if opts.all {
+    run_all_days()
+  } else {
+    match opts.day {
+      Some(day) => run_day(day_range_check(day)),
+      None => {
+        println!("No day parameter specified, attempting to run today");
+        let now_day = get_today();
+        println!("Running day {}", now_day);
+        run_day(now_day);
       }
     }
   }
@@ -86,18 +94,11 @@ fn get_today() -> usize {
   }
 }
 
-fn parse_day(day: &str) -> usize {
-  match day.parse() {
-    Ok(i) => {
-      if (i..=25).contains(&i) {
-        i
-      } else {
-        panic!("{} is not a valid day. Only days 1-25 are allowed.", i)
-      }
-    }
-    Err(_) => {
-      panic!("{} is not a valid day. Please provide a number.", day)
-    }
+fn day_range_check(day: usize) -> usize {
+  if day >= 1 && day <= 25 {
+    day
+  } else {
+    panic!("{} is not a valid day. Only days 1-25 are allowed.", day)
   }
 }
 
