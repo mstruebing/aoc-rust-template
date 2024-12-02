@@ -151,7 +151,7 @@ fn download_input(day: usize) {
   let client = reqwest::blocking::Client::new();
   let response = client
     .get(url)
-    .header("cookie", format!("session={};", session))
+    .header("cookie", format!("session={};", session.trim()))
     .send()
     .unwrap();
 
